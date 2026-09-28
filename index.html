@@ -1,0 +1,1444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Castaway Isles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bowlby+One&family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a tabletop. The hex board is the game mat on the left, the player tray stacks on the right
+   (below the board on phones). One deliberate "night-time table" look, so a single dark palette. */
+:root {
+  color-scheme: dark;
+  --table: #0b1d25;
+  --tray: #122c36;
+  --tray-2: #183a46;
+  --line: #28505d;
+  --ink: #f4ecd8;
+  --muted: #9cb8bb;
+  --sun: #ffb238;
+  --sun-ink: #2a1800;
+  --danger: #ff6a5c;
+  --ok: #8fdc97;
+  --sea: #114a5d;
+  --font-display: "Bowlby One", "Arial Black", Impact, sans-serif;
+  --font-body: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-data: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--table);
+  color: var(--ink);
+  font: 15px/1.45 var(--font-body);
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); padding-inline: 16px; }
+
+/* ---------- top bar ---------- */
+.topbar { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; padding-block: 12px; }
+.brand { font-family: var(--font-display); font-size: 1.55rem; line-height: 1; letter-spacing: .01em; margin: 0; color: var(--ink); }
+.brand span { color: var(--sun); }
+.daybar { display: flex; align-items: center; gap: 10px; font-family: var(--font-data); font-size: .85rem; color: var(--muted); }
+.daytrack { display: flex; gap: 2px; }
+.daytrack i { width: 6px; height: 14px; border-radius: 2px; background: var(--line); }
+.daytrack i.past { background: var(--sun); }
+.daytrack i.storm { background: #6d3b52; }
+.topbar .spacer { flex: 1; }
+.chip-event { font-size: .85rem; color: var(--muted); max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip-event b { color: var(--ink); font-weight: 600; }
+
+.btn {
+  appearance: none; border: 2px solid var(--line); background: var(--tray-2); color: var(--ink);
+  border-radius: 10px; padding: 8px 14px; font-weight: 600; cursor: pointer; line-height: 1.2;
+  display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+}
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: .42; cursor: not-allowed; }
+.btn.primary { background: var(--sun); border-color: var(--sun); color: var(--sun-ink); }
+.btn.primary:hover:not(:disabled) { border-color: #ffd48a; background: #ffc25e; }
+.btn.ghost { background: transparent; }
+.btn .sub { font-weight: 400; font-size: .8rem; opacity: .8; }
+kbd { font-family: var(--font-data); font-size: .72rem; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; opacity: .6; }
+
+/* ---------- main layout ---------- */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; min-height: 0; padding-bottom: 16px; }
+.board-wrap { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.board-scroll { flex: 1; min-height: 0; overflow: auto; border-radius: 16px; background: var(--sea); border: 2px solid var(--line); display: grid; place-items: center; }
+#board { display: block; touch-action: manipulation; cursor: pointer; }
+.tileinfo {
+  position: absolute; left: 12px; bottom: 52px; max-width: min(320px, calc(100% - 24px));
+  background: color-mix(in srgb, var(--table) 92%, transparent); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 12px; font-size: .85rem; pointer-events: none;
+}
+.tileinfo h3 { margin: 0 0 2px; font-size: .95rem; }
+.tileinfo p { margin: 2px 0 0; color: var(--muted); }
+.tileinfo p.warn { color: var(--danger); }
+.tileinfo p.good { color: var(--ok); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend canvas { width: 20px; height: 20px; }
+
+/* ---------- tray ---------- */
+.side { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 2px; }
+.card { background: var(--tray); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.card h2 { margin: 0; font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+
+.turn { border: 2px solid var(--pc, var(--sun)); }
+.turn-head { display: flex; align-items: center; gap: 10px; }
+.turn-head .who { font-family: var(--font-display); font-size: 1.3rem; line-height: 1.1; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pdot { width: 14px; height: 14px; border-radius: 50%; background: var(--pc); border: 2px solid #1b1410; flex: none; }
+.turn-stats { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: center; margin-top: 12px; }
+.die {
+  width: 56px; height: 56px; border-radius: 12px; background: #fff4dc; border: 3px solid #1b1410;
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr); padding: 7px; box-shadow: 0 3px 0 #1b1410;
+}
+.die i { width: 9px; height: 9px; border-radius: 50%; background: #1b1410; place-self: center; visibility: hidden; }
+.die.blank { opacity: .35; }
+.die.rolling { animation: wobble .12s linear infinite; }
+@keyframes wobble { 0% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } 100% { transform: rotate(-8deg); } }
+@media (prefers-reduced-motion: reduce) { .die.rolling { animation: none; } }
+.meters { display: grid; gap: 6px; font-size: .88rem; }
+.meter { display: flex; justify-content: space-between; gap: 8px; }
+.meter b { font-family: var(--font-data); font-weight: 500; }
+.pips { display: inline-flex; gap: 4px; }
+.pips i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--sun); }
+.pips i.on { background: var(--sun); }
+.btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.btn-grid .wide { grid-column: 1 / -1; }
+.hint { margin: 10px 0 0; font-size: .82rem; color: var(--muted); }
+
+.health { display: flex; gap: 4px; margin: 8px 0 12px; }
+.health i { flex: 1; height: 10px; border-radius: 3px; background: var(--line); }
+.health i.on { background: var(--danger); }
+.res-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.res { background: var(--tray-2); border-radius: 10px; padding: 8px 4px 6px; text-align: center; }
+.res svg { width: 22px; height: 22px; display: block; margin: 0 auto 2px; }
+.res b { display: block; font-family: var(--font-data); font-size: 1.05rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.res small { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.items { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.item { font-size: .78rem; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--muted); }
+.item.have { border-color: var(--sun); color: var(--ink); }
+.item button { all: unset; cursor: pointer; color: var(--sun); font-weight: 600; margin-left: 4px; }
+
+.route { margin-top: 10px; }
+.route h3 { margin: 0 0 4px; font-size: .95rem; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: .84rem; }
+.steps li { display: flex; gap: 8px; align-items: baseline; color: var(--muted); }
+.steps li::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 3px; border: 2px solid var(--line); transform: translateY(1px); }
+.steps li.done { color: var(--ink); }
+.steps li.done::before { background: var(--ok); border-color: var(--ok); }
+
+.recipes { display: grid; gap: 8px; margin-top: 10px; }
+.recipe { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; background: var(--tray-2); border-radius: 10px; padding: 10px; }
+.recipe h3 { margin: 0; font-size: .92rem; }
+.recipe p { margin: 0; grid-column: 1 / -1; font-size: .78rem; color: var(--muted); }
+.cost { display: flex; flex-wrap: wrap; gap: 4px; grid-column: 1 / -1; }
+.cost span { font-family: var(--font-data); font-size: .74rem; border-radius: 6px; padding: 1px 6px; background: var(--tray); display: inline-flex; align-items: center; gap: 4px; }
+.cost span svg { width: 13px; height: 13px; }
+.cost span.short { color: var(--danger); }
+.recipe .btn { padding: 5px 12px; font-size: .85rem; }
+.recipe.built { opacity: .55; }
+
+.crew { display: grid; gap: 6px; margin-top: 10px; }
+.mate { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: .86rem; }
+.mate .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mate .tag { font-family: var(--font-data); font-size: .74rem; color: var(--muted); }
+.mate.cur .name { font-weight: 800; }
+.mate.dead { opacity: .45; text-decoration: line-through; }
+
+.log { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: .82rem; max-height: 220px; overflow: auto; }
+.log li { color: var(--muted); }
+.log li .d { font-family: var(--font-data); font-size: .7rem; margin-right: 6px; color: var(--line); color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.log li b { font-weight: 600; }
+
+/* ---------- modal ---------- */
+.modal { position: fixed; inset: 0; background: rgba(4, 12, 16, .72); display: flex; padding: 16px; z-index: 10; overflow: auto; }
+.modal-card {
+  margin: auto; width: min(480px, 100%); min-width: 0; background: var(--tray); border: 2px solid var(--line); border-radius: 18px;
+  padding: 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.modal-card.event { border-color: var(--sun); }
+.modal-card .eyebrow { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--sun); font-weight: 600; margin: 0 0 6px; }
+.modal-card h2 { font-family: var(--font-display); font-weight: 400; font-size: 1.7rem; line-height: 1.1; margin: 0 0 10px; text-wrap: balance; }
+.modal-card p { margin: 0 0 10px; max-width: 60ch; }
+.modal-card ul { margin: 0 0 12px; padding-left: 18px; color: var(--muted); font-size: .92rem; }
+.modal-card .choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.modal-card.wide { width: min(720px, 100%); }
+.rules { display: grid; gap: 14px; font-size: .92rem; }
+.rules h3 { margin: 0 0 4px; font-size: 1rem; color: var(--sun); }
+.rules p, .rules ul { margin: 0; color: var(--ink); }
+.rules ul { padding-left: 18px; }
+.rules table { border-collapse: collapse; font-size: .85rem; width: 100%; }
+.rules td, .rules th { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rules th { color: var(--muted); font-weight: 600; }
+.table-scroll { overflow-x: auto; }
+
+.setup-count { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 14px; }
+.setup-label { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 14px 0 0; }
+.setup-count .btn[aria-pressed="true"] { background: var(--sun); color: var(--sun-ink); border-color: var(--sun); }
+.setup-names { display: grid; gap: 8px; }
+.setup-names label { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; font-size: .85rem; color: var(--muted); }
+.setup-names input {
+  font: inherit; color: var(--ink); background: var(--tray-2); border: 2px solid var(--line); border-radius: 10px; padding: 8px 10px; width: 100%;
+}
+.setup-names input:focus { border-color: var(--sun); outline: none; }
+
+@media (max-width: 920px) {
+  .app { height: auto; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .board-scroll { max-height: 72vh; display: block; }
+  .side { overflow: visible; }
+  .tileinfo { position: static; max-width: none; }
+  .chip-event { max-width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <h1 class="brand">Castaway <span>Isles</span></h1>
+    <div class="daybar"><span id="day-label">Day 1 of 30</span><div class="daytrack" id="daytrack" aria-hidden="true"></div></div>
+    <div class="chip-event" id="event-chip"></div>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="btn-rules" type="button">How to play</button>
+    <button class="btn ghost" id="btn-new" type="button">New game</button>
+  </header>
+
+  <main class="layout">
+    <section class="board-wrap" aria-label="Game board">
+      <div class="board-scroll" id="board-scroll"><canvas id="board" aria-label="Hex map of the five islands"></canvas></div>
+      <div class="tileinfo" id="tileinfo" hidden></div>
+      <div class="legend" id="legend"></div>
+    </section>
+    <aside class="side" id="side" aria-live="polite"></aside>
+  </main>
+</div>
+<div class="modal" id="modal" hidden></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= constants ================= */
+const SQ3 = Math.sqrt(3);
+const COLS = 27, ROWS = 21, MAX_DAY = 30, MAX_HP = 6, ACTIONS = 2;
+const PLAYER_COLORS = ['#ff7a59', '#ffe066', '#c79bff', '#7ee0ff'];
+const DEFAULT_NAMES = ['Ruth', 'Kofi', 'Ines', 'Marlow'];
+const INK = '#1b1410', CREAM = '#fff4dc';
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, reduceMotion ? 0 : ms));
+const rand = n => Math.floor(Math.random() * n);
+const pick = a => a[rand(a.length)];
+const d6 = () => 1 + rand(6);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const RES = ['wood', 'rope', 'stone', 'food', 'water'];
+const RES_NAME = { wood: 'Wood', rope: 'Rope', stone: 'Stone', food: 'Food', water: 'Water' };
+const ICON = {
+  wood: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="16" height="5" rx="2.5" fill="#c98a4b" stroke="#1b1410" stroke-width="1.5"/><rect x="5" y="13" width="16" height="5" rx="2.5" fill="#b0743a" stroke="#1b1410" stroke-width="1.5"/><circle cx="19" cy="8.5" r="1.4" fill="#f0c48d"/><circle cx="5" cy="15.5" r="1.4" fill="#f0c48d"/></svg>',
+  rope: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="#1b1410" stroke-width="5"/><circle cx="12" cy="12" r="8" fill="none" stroke="#d9c07a" stroke-width="3"/><circle cx="12" cy="12" r="3.5" fill="none" stroke="#d9c07a" stroke-width="2.5"/></svg>',
+  stone: '<svg viewBox="0 0 24 24"><path d="M4 16 7 8l6-3 6 4 1 7-6 4-8-1z" fill="#a9abad" stroke="#1b1410" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 8l6 2 6-1M13 10l1 10" fill="none" stroke="#7d7f82" stroke-width="1.2"/></svg>',
+  food: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8" fill="#8b5a2b" stroke="#1b1410" stroke-width="1.5"/><circle cx="9.5" cy="10.5" r="1.3" fill="#1b1410"/><circle cx="13.5" cy="9.5" r="1.3" fill="#1b1410"/><circle cx="12" cy="13" r="1.3" fill="#1b1410"/><path d="M12 5c1-2 3-3 5-2" fill="none" stroke="#5c9a35" stroke-width="2"/></svg>',
+  water: '<svg viewBox="0 0 24 24"><path d="M12 3c3 5 7 8 7 12a7 7 0 0 1-14 0c0-4 4-7 7-12z" fill="#5cc8f0" stroke="#1b1410" stroke-width="1.5"/><path d="M9 15a3 3 0 0 0 3 3" fill="none" stroke="#e8f8ff" stroke-width="1.6" stroke-linecap="round"/></svg>',
+};
+
+const TERRAIN = {
+  deep:    { name: 'Open sea',          water: true, fill: '#15566b' },
+  shallow: { name: 'Shallows',          water: true, fill: '#2b8d9b', yield: { food: 2 }, stock: 2 },
+  beach:   { name: 'Beach',             cost: 1, fill: '#e8cf8c', yield: { food: 2 }, stock: 2 },
+  jungle:  { name: 'Jungle',            cost: 2, fill: '#2e7a45', yield: { wood: 3 }, stock: 3 },
+  thicket: { name: 'Vine thicket',      cost: 2, fill: '#5f9a3a', yield: { rope: 2, wood: 1 }, stock: 2 },
+  rock:    { name: 'Rocky slopes',      cost: 2, fill: '#8d8577', yield: { stone: 2 }, stock: 3 },
+  spring:  { name: 'Freshwater spring', cost: 1, fill: '#3f8f6a', yield: { water: 3 }, stock: 5 },
+  summit:  { name: 'Volcano summit',    cost: 3, fill: '#5a4540' },
+  village: { name: 'Tribal village',    cost: Infinity, fill: '#9c5a2c' },
+};
+
+const ISLANDS = [
+  { key: 'main', name: 'Castaway Isle', c: 13, r: 10, rx: 6.7, ry: 5.3 },
+  { key: 'nw', name: 'Wreck Reef',   c: 3,  r: 3,  rx: 2.3, ry: 2.1, lm: 'shipwreck' },
+  { key: 'ne', name: 'Gull Point',   c: 23, r: 3,  rx: 2.3, ry: 2.1, lm: 'lighthouse' },
+  { key: 'sw', name: 'Crab Key',     c: 3,  r: 17, rx: 2.3, ry: 2.1, lm: 'oldcamp' },
+  { key: 'se', name: 'Turtle Atoll', c: 23, r: 17, rx: 2.3, ry: 2.1, lm: 'hut' },
+];
+const ISLAND_NAME = Object.fromEntries(ISLANDS.map(i => [i.key, i.name]));
+
+const ITEMS = {
+  spear:   { name: 'Spear' },
+  canoe:   { name: 'Canoe' },
+  machete: { name: 'Machete', desc: 'Jungle and thicket cost 1 move.' },
+  medkit:  { name: 'First-aid kit', desc: 'Use any time to heal 3.' },
+  sail:    { name: 'Sail canvas' },
+  flare:   { name: 'Flare gun' },
+};
+const LANDMARKS = {
+  shipwreck:  { name: 'Shipwreck', item: 'sail', verb: 'Search the wreck', text: 'A cargo ship ran aground here. Its canvas might still be good for a sail.' },
+  lighthouse: { name: 'Old lighthouse', item: 'flare', verb: 'Search the lighthouse', text: 'The keeper left in a hurry. There may be a flare gun in the lamp room.' },
+  oldcamp:    { name: 'Abandoned camp', item: 'machete', verb: 'Search the camp', text: 'Someone else was stranded here once. Their machete could still be around.' },
+  hut:        { name: 'Research hut', item: 'medkit', verb: 'Search the hut', text: 'A turtle-watch station with a first-aid cabinet.' },
+  summit:     { name: 'Volcano summit', text: 'The highest point. A signal fire here can be seen for miles.' },
+  village:    { name: 'Tribal village', text: 'The island’s people live here. Outsiders are not welcome and cannot enter.' },
+  camp:       { name: 'Crash beach', text: 'Where you washed ashore. Someone wrote SOS in the sand.' },
+};
+
+const RECIPES = [
+  { id: 'spear', name: 'Spear', cost: { wood: 1, stone: 1 },
+    desc: 'Fends off crabs (and turns them into dinner). Lets you fish in the shallows.' },
+  { id: 'canoe', name: 'Dugout canoe', cost: { wood: 3, rope: 2 }, where: 'beach',
+    desc: 'Paddle over deep water to the outer islands. Jellyfish sting less from a boat.' },
+  { id: 'fire', name: 'Signal fire', cost: { wood: 4, rope: 1 }, need: 'flare', where: 'summit',
+    desc: 'A helicopter arrives after 3 nights. Be within 1 hex of the summit when it lands.' },
+  { id: 'raft', name: 'Sailing raft', cost: { wood: 5, rope: 3, stone: 1, food: 2, water: 2 }, need: 'sail', where: 'beach',
+    desc: 'Launch with provisions, then sail off any edge of the map to escape.' },
+];
+
+const EVENTS = {
+  rain:     { name: 'Tropical downpour', text: 'Everyone collects rainwater: +2 Water.' },
+  heat:     { name: 'Heat wave', text: 'Everyone drinks an extra Water. No water means −1 health.' },
+  crate:    { name: 'Supply crate', text: 'A crate washes up on a beach. The first castaway to reach it keeps what’s inside.' },
+  tide:     { name: 'Rough tides', text: 'Jellyfish swarms drift two extra hexes tonight.' },
+  crabs:    { name: 'Crab migration', text: 'Two more crab swarms scuttle up the beaches.' },
+  ceremony: { name: 'Night ceremony', text: 'Drums from the village. Every patrol returns home for the night.' },
+  hunt:     { name: 'Hunting party', text: 'A new patrol sets out from the village.' },
+  fruit:    { name: 'Fruiting season', text: 'Beaches, jungles and thickets regrow in full.' },
+  calm:     { name: 'Calm night', text: 'Stars, surf, nothing else. A rare good night’s sleep.' },
+  fever:    { name: 'Fever', text: 'One castaway wakes up shivering: −1 health.' },
+  fish:     { name: 'Fish run', text: 'The shallows are thick with fish. All shallows restock.' },
+  bloom:    { name: 'Jellyfish bloom', text: 'Two new jellyfish swarms rise in the channels.' },
+};
+const DECK = ['rain', 'rain', 'heat', 'crate', 'crate', 'tide', 'crabs', 'ceremony', 'hunt', 'fruit', 'calm', 'calm', 'fever', 'fish', 'bloom'];
+
+const HAZARDS = {
+  crab:   { name: 'Flesh-eating crabs', fill: '#d9483a', text: '−2 health when you step in, unless you carry a spear.' },
+  jelly:  { name: 'Jellyfish swarm', fill: '#8a5cd6', text: '−2 health if you swim through, −1 from a boat.' },
+  patrol: { name: 'Tribal patrol', fill: '#8a4a22', text: 'Offer 2 Food to pass, or run and drop half your wood and rope.' },
+};
+
+/* ================= hex math ================= */
+const idx = (c, r) => r * COLS + c;
+const inb = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS;
+function neighbors(c, r) {
+  const d = (r & 1)
+    ? [[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]]
+    : [[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]];
+  const out = [];
+  for (const [dc, dr] of d) if (inb(c + dc, r + dr)) out.push(idx(c + dc, r + dr));
+  return out;
+}
+function cube(c, r) { const x = c - (r - (r & 1)) / 2; return [x, -x - r, r]; }
+function hexDist(a, b) {
+  const A = cube(a.c, a.r), B = cube(b.c, b.r);
+  return Math.max(Math.abs(A[0] - B[0]), Math.abs(A[1] - B[1]), Math.abs(A[2] - B[2]));
+}
+const unit = (c, r) => [SQ3 * (c + 0.5 * (r & 1)), 1.5 * r];
+const isEdge = t => t.c === 0 || t.r === 0 || t.c === COLS - 1 || t.r === ROWS - 1;
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ================= map ================= */
+function buildMap() {
+  const rng = mulberry32(90417);
+  const tiles = [];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) tiles.push({ c, r, t: 'deep', isl: null, stock: 0, max: 0, lm: null });
+  const phases = ISLANDS.map(() => [rng() * 6.28, rng() * 6.28, rng() * 6.28]);
+  const norm = (t, I) => {
+    const [x, y] = unit(t.c, t.r), [cx, cy] = unit(I.c, I.r);
+    const dx = (x - cx) / (SQ3 * I.rx), dy = (y - cy) / (SQ3 * I.ry);
+    return { d: Math.hypot(dx, dy), a: Math.atan2(dy, dx) };
+  };
+  for (const t of tiles) {
+    if (isEdge(t)) continue;
+    ISLANDS.some((I, k) => {
+      const { d, a } = norm(t, I), [p1, p2, p3] = phases[k];
+      const lim = 1 + 0.12 * Math.sin(3 * a + p1) + 0.07 * Math.sin(5 * a + p2) + 0.05 * Math.sin(2 * a + p3);
+      if (d < lim) { t.isl = I.key; t.t = 'land'; return true; }
+      return false;
+    });
+  }
+  // water depth: distance from land
+  const dist = tiles.map(t => t.isl ? 0 : Infinity);
+  const q = tiles.map((t, i) => i).filter(i => dist[i] === 0);
+  while (q.length) {
+    const i = q.shift();
+    for (const j of neighbors(tiles[i].c, tiles[i].r)) if (dist[j] > dist[i] + 1) { dist[j] = dist[i] + 1; q.push(j); }
+  }
+  tiles.forEach((t, i) => {
+    if (t.isl) return;
+    if (dist[i] === 1 || (dist[i] === 2 && rng() < 0.3)) t.t = 'shallow';
+  });
+  // land types
+  tiles.forEach(t => {
+    if (!t.isl) return;
+    const coast = neighbors(t.c, t.r).some(j => !tiles[j].isl);
+    const I = ISLANDS.find(i => i.key === t.isl);
+    const { d, a } = norm(t, I);
+    if (coast) { t.t = (t.isl === 'main' && Math.sin(a) < -0.5 && rng() < 0.35) ? 'rock' : 'beach'; return; }
+    if (t.isl === 'main') {
+      if (d < 0.34) { t.t = 'rock'; return; }
+      const x = rng();
+      t.t = x < 0.26 ? 'thicket' : x < 0.33 ? 'rock' : 'jungle';
+    } else {
+      const x = rng();
+      t.t = x < 0.3 ? 'rock' : x < 0.52 ? 'thicket' : 'jungle';
+    }
+  });
+  const nearest = (I, deg, k, ok) => {
+    const [cx, cy] = unit(I.c, I.r), a = deg * Math.PI / 180;
+    const tx = cx + Math.cos(a) * k * I.rx * SQ3, ty = cy + Math.sin(a) * k * I.ry * SQ3;
+    let best = -1, bd = Infinity;
+    tiles.forEach((t, i) => {
+      if (!ok(t)) return;
+      const [x, y] = unit(t.c, t.r), dd = (x - tx) ** 2 + (y - ty) ** 2;
+      if (dd < bd) { bd = dd; best = i; }
+    });
+    return best;
+  };
+  const M = ISLANDS[0];
+  const inland = t => t.isl === 'main' && ['jungle', 'thicket', 'rock'].includes(t.t);
+  const summit = nearest(M, 0, 0, t => t.isl === 'main');
+  Object.assign(tiles[summit], { t: 'summit', lm: 'summit' });
+  const village = nearest(M, 180, 0.62, inland);
+  Object.assign(tiles[village], { t: 'village', lm: 'village' });
+  for (const deg of [15, 120, 245]) tiles[nearest(M, deg, 0.62, inland)].t = 'spring';
+  const camp = nearest(M, 95, 1.1, t => t.isl === 'main' && t.t === 'beach');
+  tiles[camp].lm = 'camp';
+  for (const I of ISLANDS.slice(1)) tiles[nearest(I, 0, 0, t => t.isl === I.key)].lm = I.lm;
+  tiles.forEach(t => { const T = TERRAIN[t.t]; if (T.stock) { t.max = T.stock; t.stock = T.stock; } });
+  const vt = tiles[village];
+  const territory = tiles.map((t, i) => i).filter(i => {
+    const t = tiles[i];
+    return t.isl === 'main' && t.t !== 'village' && t.t !== 'summit' && hexDist(t, vt) <= 3;
+  });
+  return { tiles, meta: { summit, village, camp, territory } };
+}
+
+/* ================= state ================= */
+let S = null;
+let reach = null;
+let terrSet = new Set();
+let hoverIdx = -1, lastPointer = 'mouse';
+let busy = false;
+
+const curP = () => S.players[S.cur];
+const alive = () => S.players.filter(p => p.status === 'alive');
+const pIdx = p => idx(p.c, p.r);
+const tileOf = p => S.tiles[pIdx(p)];
+const hazardsAt = i => { const t = S.tiles[i]; return S.hazards.filter(h => h.c === t.c && h.r === t.r); };
+const pname = p => `<b style="color:${p.color}">${esc(p.name)}</b>`;
+const freshTurn = () => ({ rolled: false, die: 0, mp: 0, actions: ACTIONS });
+function log(html) { S.log.unshift({ d: S.day, html }); if (S.log.length > 80) S.log.length = 80; }
+
+function newGame(names) {
+  const { tiles, meta } = buildMap();
+  const camp = tiles[meta.camp];
+  S = {
+    v: 1, tiles, meta, day: 1, cur: 0, turn: freshTurn(), hazards: [], crates: [], log: [],
+    deck: shuffle(DECK.slice()), event: null, over: null,
+    lmStock: { shipwreck: names.length, lighthouse: names.length, oldcamp: 1, hut: 2 },
+    players: names.map((name, i) => ({
+      name, color: PLAYER_COLORS[i], c: camp.c, r: camp.r, hp: MAX_HP, status: 'alive',
+      res: { wood: 0, rope: 0, stone: 0, food: 2, water: 2 },
+      items: { spear: false, canoe: false, machete: false, medkit: false, sail: false, flare: false },
+      fire: 0, sailing: false,
+    })),
+  };
+  terrSet = new Set(meta.territory);
+  const farFromCamp = t => hexDist(t, camp) > 2;
+  for (let k = 0; k < 3; k++) spawn('patrol');
+  for (let k = 0; k < 5; k++) spawn('crab', t => t.isl === 'main' && farFromCamp(t));
+  for (let k = 0; k < 2; k++) spawn('crab', t => t.isl === 'sw');
+  spawn('crab', t => t.isl === 'se');
+  for (let k = 0; k < 8; k++) spawn('jelly', t => farFromCamp(t));
+  log(`${names.length === 1 ? 'You wash' : 'You all wash'} up on Crash beach. Find a way off the island before the monsoon on Day ${MAX_DAY}.`);
+  startTurn();
+}
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function hazardOk(kind, t, i) {
+  if (kind === 'crab') return t.t === 'beach';
+  if (kind === 'jelly') return TERRAIN[t.t].water && !isEdge(t);
+  if (kind === 'patrol') return terrSet.has(i);
+  return false;
+}
+function spawn(kind, extra = () => true) {
+  const opts = [];
+  S.tiles.forEach((t, i) => {
+    if (!hazardOk(kind, t, i) || !extra(t)) return;
+    if (hazardsAt(i).length || S.players.some(p => p.status === 'alive' && pIdx(p) === i)) return;
+    opts.push(i);
+  });
+  if (!opts.length) return false;
+  const t = S.tiles[pick(opts)];
+  S.hazards.push({ kind, c: t.c, r: t.r });
+  return true;
+}
+function stepHazard(h) {
+  const opts = neighbors(h.c, h.r).filter(j => hazardOk(h.kind, S.tiles[j], j) && !hazardsAt(j).length);
+  if (!opts.length || Math.random() < 0.2) return;
+  const t = S.tiles[pick(opts)];
+  h.c = t.c; h.r = t.r;
+}
+function moveHazards(jellySteps = 1) {
+  for (const h of S.hazards) {
+    const n = h.kind === 'patrol' ? 2 : h.kind === 'jelly' ? jellySteps : 1;
+    for (let k = 0; k < n; k++) stepHazard(h);
+  }
+}
+
+/* ================= rules ================= */
+function moveCost(p, to) {
+  const T = TERRAIN[to.t];
+  if (p.sailing) return T.water ? 1 : Infinity;
+  if (T.water) {
+    if (p.items.canoe) return 1;
+    return to.t === 'shallow' ? 2 : Infinity;
+  }
+  if (p.items.machete && (to.t === 'jungle' || to.t === 'thicket')) return 1;
+  return T.cost;
+}
+function computeReach() {
+  reach = null;
+  if (!S || S.over || busy) return;
+  const p = curP();
+  if (!p || p.status !== 'alive' || S.turn.mp <= 0) return;
+  const start = pIdx(p), dist = new Map([[start, 0]]), prev = new Map(), pq = [[0, start]];
+  while (pq.length) {
+    pq.sort((a, b) => a[0] - b[0]);
+    const [d, i] = pq.shift();
+    if (d > dist.get(i)) continue;
+    if (i !== start && hazardsAt(i).length) continue; // hazards stop you
+    if (i !== start && p.sailing && isEdge(S.tiles[i])) continue;
+    const t = S.tiles[i];
+    for (const j of neighbors(t.c, t.r)) {
+      const nd = d + moveCost(p, S.tiles[j]);
+      if (nd <= S.turn.mp && nd < (dist.get(j) ?? Infinity)) { dist.set(j, nd); prev.set(j, i); pq.push([nd, j]); }
+    }
+  }
+  dist.delete(start);
+  reach = { dist, prev };
+}
+function gatherInfo(p) {
+  const t = tileOf(p), T = TERRAIN[t.t];
+  if (p.sailing) return { ok: false, why: 'You are at sea on your raft.' };
+  if (!T.yield) return { ok: false, why: `Nothing to gather on ${T.name.toLowerCase()}.` };
+  if (t.t === 'shallow' && !p.items.spear) return { ok: false, why: 'You need a spear to fish.' };
+  if (t.stock <= 0) return { ok: false, why: 'Picked clean for now. It regrows over a few days.' };
+  return { ok: true, yield: T.yield };
+}
+const fmtYield = y => Object.entries(y).map(([k, v]) => `+${v} ${RES_NAME[k]}`).join(', ');
+function recipeState(p, R) {
+  const t = tileOf(p);
+  const short = Object.entries(R.cost).filter(([k, v]) => p.res[k] < v).map(([k]) => k);
+  let done = false, why = '';
+  if (R.id === 'spear') done = p.items.spear;
+  if (R.id === 'canoe') done = p.items.canoe;
+  if (R.id === 'fire') done = p.fire > 0;
+  if (R.id === 'raft') done = p.sailing;
+  if (!done) {
+    if (R.need && !p.items[R.need]) why = `Needs the ${ITEMS[R.need].name.toLowerCase()} from ${R.need === 'sail' ? 'the shipwreck on Wreck Reef' : 'the lighthouse on Gull Point'}.`;
+    else if (R.where === 'beach' && t.t !== 'beach') why = 'Build it while standing on a beach.';
+    else if (R.where === 'summit' && t.t !== 'summit') why = 'Build it on the volcano summit.';
+    else if (short.length) why = 'Not enough materials yet.';
+  }
+  return { done, short, why, ok: !done && !why && !p.sailing && S.turn && !S.over };
+}
+
+function hurt(p, n, lines) {
+  p.hp = Math.max(0, p.hp - n);
+  if (p.hp === 0 && p.status === 'alive') {
+    p.status = 'dead';
+    const msg = `${pname(p)} did not survive. The island claims another castaway.`;
+    log(msg); if (lines) lines.push(msg);
+  }
+}
+
+/* ================= turn flow ================= */
+async function startTurn() {
+  S.turn = freshTurn();
+  reach = null;
+  render();
+  centerOn(curP());
+  const p = curP();
+  const hs = hazardsAt(pIdx(p));
+  if (hs.length) {
+    await encounter(p, hs[0], null);
+    render();
+    if (p.status !== 'alive') { await announceDeath(p); await endTurn(); }
+  }
+  save();
+}
+
+async function endTurn() {
+  if (busy || !S || S.over) return;
+  busy = true;
+  reach = null; hoverIdx = -1;
+  const n = S.players.length;
+  const nextAfter = k => { for (let i = k + 1; i < n; i++) if (S.players[i].status === 'alive') return i; return -1; };
+  let nxt = nextAfter(S.cur);
+  if (nxt < 0) {
+    await endRound();
+    if (S.over) { busy = false; render(); save(); showGameOver(); return; }
+    nxt = nextAfter(-1);
+  }
+  busy = false;
+  if (nxt < 0) { finishGame(); return; }
+  S.cur = nxt;
+  await startTurn();
+}
+
+async function endRound() {
+  const lines = [];
+  for (const p of alive()) {
+    if (p.sailing) { lines.push(`${pname(p)} eats from the raft’s provisions.`); continue; }
+    const miss = [];
+    if (p.res.food > 0) p.res.food--; else miss.push('food');
+    if (tileOf(p).t !== 'spring') { if (p.res.water > 0) p.res.water--; else miss.push('water'); }
+    if (miss.length) { lines.push(`${pname(p)} goes without ${miss.join(' and ')}: −${miss.length} health.`); hurt(p, miss.length, lines); }
+    else lines.push(`${pname(p)} eats 1 Food and drinks 1 Water.`);
+  }
+  // signal fires
+  let landing = false;
+  for (const p of alive()) if (p.fire > 0) { p.fire--; if (p.fire === 0) landing = true; }
+  for (const p of S.players) if (p.status !== 'alive') p.fire = 0;
+  if (landing) {
+    const sm = S.tiles[S.meta.summit];
+    const saved = alive().filter(p => !p.sailing && hexDist(tileOf(p), sm) <= 1);
+    if (saved.length) {
+      saved.forEach(p => { p.status = 'rescued'; });
+      const msg = `A helicopter follows the smoke and lands on the summit. ${saved.map(pname).join(' and ')} climb aboard.`;
+      lines.push(msg); log(msg);
+    } else {
+      const msg = 'A helicopter circles the summit, finds nobody, and turns back. The signal fire burns out.';
+      lines.push(msg); log(msg);
+    }
+  }
+  let ev = null;
+  if (!checkEnd()) {
+    if (!S.deck.length) S.deck = shuffle(DECK.slice());
+    const id = S.deck.pop();
+    ev = { id, ...EVENTS[id] };
+    S.event = id;
+    const extra = applyEvent(id, lines);
+    moveHazards(extra.jelly || 1);
+    regrow(id);
+    log(`Night ${S.day}: <b>${ev.name}</b>. ${ev.text}`);
+  }
+  const endedDay = S.day;
+  S.day++;
+  if (!checkEnd() && S.day > MAX_DAY) {
+    S.over = { win: false, title: 'The monsoon hits', text: `Day ${MAX_DAY} ends and the monsoon closes over the islands. Nobody made it off in time.` };
+  }
+  render();
+  if (!S.over || ev) {
+    await modal({
+      cls: 'event',
+      eyebrow: `Night falls on day ${endedDay}`,
+      title: ev ? ev.name : 'The last night',
+      html: `${ev ? `<p>${ev.text}</p>` : ''}<ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul>`,
+      choices: [{ label: S.over ? 'See how it ended' : `Start day ${S.day}`, value: 1, primary: true }],
+    });
+  }
+}
+
+function applyEvent(id, lines) {
+  const out = {};
+  const ashore = alive().filter(p => !p.sailing);
+  switch (id) {
+    case 'rain': ashore.forEach(p => { p.res.water += 2; }); break;
+    case 'heat': ashore.forEach(p => {
+      if (tileOf(p).t === 'spring') return;
+      if (p.res.water > 0) p.res.water--; else { lines.push(`${pname(p)} has no water in the heat: −1 health.`); hurt(p, 1, lines); }
+    }); break;
+    case 'crate': {
+      const opts = S.tiles.map((t, i) => i).filter(i => S.tiles[i].t === 'beach' && !hazardsAt(i).length && !S.crates.some(c => idx(c.c, c.r) === i));
+      if (opts.length) { const t = S.tiles[pick(opts)]; S.crates.push({ c: t.c, r: t.r }); lines.push(`The crate lands on a beach on ${ISLAND_NAME[t.isl]}.`); }
+      break;
+    }
+    case 'tide': out.jelly = 3; break;
+    case 'crabs': spawn('crab'); spawn('crab'); break;
+    case 'ceremony': {
+      const home = S.tiles[S.meta.village];
+      const spots = neighbors(home.c, home.r).filter(j => terrSet.has(j));
+      S.hazards.filter(h => h.kind === 'patrol').forEach((h, k) => { const t = S.tiles[spots[k % spots.length]]; h.c = t.c; h.r = t.r; });
+      break;
+    }
+    case 'hunt': if (S.hazards.filter(h => h.kind === 'patrol').length < 5) spawn('patrol'); break;
+    case 'fruit': S.tiles.forEach(t => { if (['beach', 'jungle', 'thicket'].includes(t.t)) t.stock = t.max; }); break;
+    case 'fever': { const a = alive(); if (a.length) { const p = pick(a); lines.push(`${pname(p)} has the fever: −1 health.`); hurt(p, 1, lines); } break; }
+    case 'fish': S.tiles.forEach(t => { if (t.t === 'shallow') t.stock = t.max; }); break;
+    case 'bloom': spawn('jelly'); spawn('jelly'); break;
+  }
+  return out;
+}
+function regrow() {
+  for (const t of S.tiles) {
+    if (!t.max || t.stock >= t.max) continue;
+    if (t.t === 'spring' || Math.random() < 0.3) t.stock++;
+  }
+}
+
+function checkEnd() {
+  if (S.over) return true;
+  const winners = S.players.filter(p => p.status === 'escaped' || p.status === 'rescued');
+  if (winners.length) {
+    const how = winners[0].status === 'escaped' ? 'sailed past the horizon on a homemade raft' : 'were lifted off the summit by helicopter';
+    S.over = { win: true, title: `${winners.map(p => p.name).join(' & ')} got off the island`, text: `On day ${S.day}, ${winners.map(p => esc(p.name)).join(' and ')} ${how}.` };
+    return true;
+  }
+  if (!alive().length) {
+    S.over = { win: false, title: 'Lost to the islands', text: 'Every castaway has fallen. The crabs, the tides and the long nights won this time.' };
+    return true;
+  }
+  return false;
+}
+function finishGame() { checkEnd(); render(); save(); showGameOver(); }
+
+async function showGameOver() {
+  const v = await modal({
+    cls: 'event', eyebrow: S.over.win ? 'Escape!' : 'Game over', title: S.over.title,
+    html: `<p>${S.over.text}</p>`,
+    choices: [{ label: 'Play again', value: 'new', primary: true }, { label: 'Look at the board', value: 'stay' }],
+  });
+  if (v === 'new') showSetup();
+}
+async function announceDeath(p) {
+  await modal({ eyebrow: `Day ${S.day}`, title: `${p.name} is gone`, html: `<p>${esc(p.name)} ran out of strength. Their pawn leaves the board.</p>`, choices: [{ label: 'Continue', value: 1, primary: true }] });
+}
+
+/* ================= actions ================= */
+async function doRoll() {
+  if (busy || S.over || S.turn.rolled) return;
+  busy = true;
+  S.turn.rolled = true;
+  const die = document.querySelector('.die');
+  if (die) die.classList.add('rolling');
+  for (let k = 0; k < 7; k++) { S.turn.die = d6(); paintDie(); await sleep(60); }
+  S.turn.die = d6(); S.turn.mp = S.turn.die;
+  busy = false;
+  log(`${pname(curP())} rolls a ${S.turn.die}.`);
+  computeReach(); render(); save();
+}
+function doGather() {
+  const p = curP(), g = gatherInfo(p);
+  if (busy || S.over || !g.ok || S.turn.actions <= 0) return;
+  const t = tileOf(p);
+  for (const [k, v] of Object.entries(g.yield)) p.res[k] += v;
+  t.stock--; S.turn.actions--;
+  const verb = { beach: 'gathers coconuts and clams', jungle: 'chops driftwood and fallen trunks', thicket: 'strips vines into rope', rock: 'hauls loose stone', spring: 'fills up at the spring', shallow: 'spears fish in the shallows' }[t.t] || 'gathers';
+  log(`${pname(p)} ${verb}: ${fmtYield(g.yield)}.`);
+  render(); save();
+}
+function doSearch() {
+  const p = curP(), t = tileOf(p), L = LANDMARKS[t.lm];
+  if (busy || S.over || !L || !L.item || S.turn.actions <= 0 || p.items[L.item] || p.sailing) return;
+  S.turn.actions--;
+  if (S.lmStock[t.lm] <= 0) { log(`${pname(p)} searches the ${L.name.toLowerCase()}, but it has been stripped bare.`); }
+  else {
+    const roll = d6();
+    if (roll >= 3) { p.items[L.item] = true; S.lmStock[t.lm]--; log(`${pname(p)} searches the ${L.name.toLowerCase()} (rolled ${roll}) and finds the <b>${ITEMS[L.item].name.toLowerCase()}</b>.`); }
+    else log(`${pname(p)} searches the ${L.name.toLowerCase()} (rolled ${roll}) and comes up empty. Try again.`);
+  }
+  render(); save();
+}
+function doRest() {
+  const p = curP();
+  if (busy || S.over || S.turn.actions <= 0 || p.hp >= MAX_HP) return;
+  S.turn.actions--; p.hp++;
+  log(`${pname(p)} rests in the shade: +1 health.`);
+  render(); save();
+}
+function doMedkit() {
+  const p = curP();
+  if (busy || S.over || !p.items.medkit) return;
+  p.items.medkit = false; p.hp = Math.min(MAX_HP, p.hp + 3);
+  log(`${pname(p)} patches up with the first-aid kit: +3 health.`);
+  render(); save();
+}
+function doCraft(id) {
+  const p = curP(), R = RECIPES.find(r => r.id === id);
+  if (busy || S.over || !R || !recipeState(p, R).ok) return;
+  for (const [k, v] of Object.entries(R.cost)) p.res[k] -= v;
+  if (id === 'spear') { p.items.spear = true; log(`${pname(p)} lashes a stone point to a pole: <b>spear</b> ready.`); }
+  if (id === 'canoe') { p.items.canoe = true; log(`${pname(p)} hollows out a log: <b>canoe</b> ready. The outer islands are in reach.`); }
+  if (id === 'fire') { p.fire = 3; log(`${pname(p)} fires the flare and lights the <b>signal fire</b>. Rescue in 3 nights: stay close to the summit.`); }
+  if (id === 'raft') { p.sailing = true; log(`${pname(p)} launches the <b>raft</b>. Sail off any edge of the map to escape.`); }
+  computeReach(); render(); save();
+}
+async function moveTo(target) {
+  if (busy || !reach || !reach.dist.has(target)) return;
+  const p = curP(), path = [];
+  for (let i = target; i !== pIdx(p); i = reach.prev.get(i)) path.unshift(i);
+  busy = true; reach = null; hoverIdx = -1;
+  for (const j of path) {
+    const back = pIdx(p), t = S.tiles[j];
+    S.turn.mp -= moveCost(p, t);
+    p.c = t.c; p.r = t.r;
+    draw();
+    await sleep(120);
+    const ci = S.crates.findIndex(c => c.c === t.c && c.r === t.r);
+    if (ci >= 0) {
+      S.crates.splice(ci, 1);
+      const loot = { food: 2, water: 2, [pick(['wood', 'rope', 'stone'])]: 2 };
+      for (const [k, v] of Object.entries(loot)) p.res[k] += v;
+      let msg = `${pname(p)} cracks open the supply crate: ${fmtYield(loot)}`;
+      if (!p.items.medkit && Math.random() < 0.35) { p.items.medkit = true; msg += ', and a first-aid kit'; }
+      log(msg + '.');
+    }
+    if (p.sailing && isEdge(t)) {
+      p.status = 'escaped';
+      log(`${pname(p)} sails over the horizon. Escaped!`);
+      busy = false; finishGame(); return;
+    }
+    const hs = hazardsAt(j);
+    if (hs.length) { S.turn.mp = 0; render(); await encounter(p, hs[0], back); break; }
+  }
+  S.turn.mp = Math.max(0, S.turn.mp);
+  busy = false;
+  if (p.status !== 'alive') { render(); await announceDeath(p); if (!checkEnd()) { await endTurn(); } else finishGame(); return; }
+  computeReach(); render(); save();
+}
+
+async function encounter(p, h, back) {
+  if (h.kind === 'crab') {
+    if (p.items.spear) {
+      p.res.food += 1;
+      log(`${pname(p)} jabs at the crab swarm and drives it off: +1 Food.`);
+      const opts = S.tiles.map((t, i) => i).filter(i => S.tiles[i].t === 'beach' && !hazardsAt(i).length && hexDist(S.tiles[i], p) > 4);
+      if (opts.length) { const t = S.tiles[pick(opts)]; h.c = t.c; h.r = t.r; }
+    } else {
+      log(`Flesh-eating crabs swarm ${pname(p)}’s ankles: −2 health.`);
+      await modal({ eyebrow: HAZARDS.crab.name, title: 'The sand starts moving', html: `<p>Hundreds of crabs pour out of their burrows and go for your ankles. You lose 2 health.</p><p>A spear (1 Wood, 1 Stone) lets you fight them off next time.</p>`, choices: [{ label: 'Limp on', value: 1, primary: true }] });
+      hurt(p, 2);
+    }
+  } else if (h.kind === 'jelly') {
+    const boat = p.sailing || p.items.canoe;
+    const dmg = boat ? 1 : 2;
+    log(`${pname(p)} drifts into a jellyfish swarm: −${dmg} health.`);
+    await modal({ eyebrow: HAZARDS.jelly.name, title: 'Stung', html: `<p>${boat ? 'Tentacles slap over the side of your boat.' : 'The water fills with pale bells and burning threads.'} You lose ${dmg} health.</p>`, choices: [{ label: 'Keep going', value: 1, primary: true }] });
+    hurt(p, dmg);
+  } else if (h.kind === 'patrol') {
+    const canGift = p.res.food >= 2;
+    const v = await modal({
+      eyebrow: HAZARDS.patrol.name, title: 'You are on their land',
+      html: `<p>A patrol steps out of the trees and blocks the path. They make it clear you are trespassing.</p><p>You can offer food as a gift, or run and leave some of your load behind.</p>`,
+      choices: [
+        { label: 'Offer 2 Food', value: 'gift', primary: true, disabled: !canGift },
+        { label: 'Run for it', value: 'run' },
+      ],
+    });
+    if (v === 'gift') {
+      p.res.food -= 2;
+      log(`${pname(p)} offers 2 Food. The patrol accepts and lets them pass.`);
+    } else {
+      const lw = Math.ceil(p.res.wood / 2), lr = Math.ceil(p.res.rope / 2);
+      p.res.wood -= lw; p.res.rope -= lr;
+      log(`${pname(p)} runs from the patrol, dropping ${lw} Wood and ${lr} Rope: −1 health.`);
+      hurt(p, 1);
+      let dest = back;
+      if (dest == null) {
+        const opts = neighbors(p.c, p.r).filter(j => moveCost(p, S.tiles[j]) < Infinity && !hazardsAt(j).length);
+        dest = opts.length ? pick(opts) : null;
+      }
+      if (dest != null) { const t = S.tiles[dest]; p.c = t.c; p.r = t.r; }
+    }
+  }
+}
+
+/* ================= persistence ================= */
+function save() { try { if (S) localStorage.setItem('castaway-isles', JSON.stringify(S)); } catch (e) { /* storage unavailable */ } }
+function loadSaved() { try { const s = JSON.parse(localStorage.getItem('castaway-isles')); return s && s.v === 1 && s.tiles ? s : null; } catch (e) { return null; } }
+
+/* ================= board drawing ================= */
+const cv = $('#board'), scroller = $('#board-scroll');
+let ctx = cv.getContext('2d');
+let size = 20, pad = 14, W = 0, H = 0;
+const px = (c, r) => [pad + size * (SQ3 * (c + 0.5 * (r & 1)) + SQ3 / 2), pad + size * (1 + 1.5 * r)];
+const upx = (ux, uy) => [pad + size * (ux + SQ3 / 2), pad + size * (uy + 1)];
+
+function resize() {
+  const narrow = matchMedia('(max-width: 920px)').matches;
+  const aw = scroller.clientWidth - 4, ah = scroller.clientHeight - 4;
+  const fitW = (aw - pad * 2) / (SQ3 * (COLS + 0.5));
+  const fitH = (ah - pad * 2) / (1.5 * (ROWS - 1) + 2);
+  size = Math.max(narrow ? 15 : 13, Math.min(fitW, narrow ? fitW : fitH));
+  W = Math.ceil(pad * 2 + size * SQ3 * (COLS + 0.5));
+  H = Math.ceil(pad * 2 + size * (1.5 * (ROWS - 1) + 2));
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  draw();
+}
+function hexPath(x, y, s) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI / 180 * (60 * i - 30);
+    const X = x + s * Math.cos(a), Y = y + s * Math.sin(a);
+    i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y);
+  }
+  ctx.closePath();
+}
+function wave(x, y, w, col) {
+  ctx.beginPath(); ctx.moveTo(x - w, y);
+  ctx.quadraticCurveTo(x - w / 2, y - w * 0.5, x, y);
+  ctx.quadraticCurveTo(x + w / 2, y + w * 0.5, x + w, y);
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(1, size * 0.07); ctx.stroke();
+}
+function decorate(t, i, x, y) {
+  const R = mulberry32(i * 7919 + 13), s = size;
+  const jit = k => (R() - 0.5) * s * k;
+  switch (t.t) {
+    case 'deep': if (R() < 0.3) wave(x + jit(0.8), y + jit(0.8), s * 0.26, 'rgba(255,255,255,.08)'); break;
+    case 'shallow': wave(x + jit(0.6), y - s * 0.2, s * 0.24, 'rgba(255,255,255,.2)'); if (R() < 0.6) wave(x + jit(0.6), y + s * 0.3, s * 0.2, 'rgba(255,255,255,.14)'); break;
+    case 'beach': ctx.fillStyle = 'rgba(140,100,40,.35)'; for (let k = 0; k < 5; k++) { ctx.beginPath(); ctx.arc(x + jit(1.1), y + jit(1.1), Math.max(0.8, s * 0.045), 0, 7); ctx.fill(); } break;
+    case 'jungle': for (let k = 0; k < 3; k++) {
+      const cx = x + jit(0.9), cy = y + jit(0.8), rr = s * (0.2 + R() * 0.08);
+      ctx.fillStyle = '#1d5a31'; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, 7); ctx.fill();
+      ctx.fillStyle = '#44985a'; ctx.beginPath(); ctx.arc(cx - rr * 0.3, cy - rr * 0.3, rr * 0.45, 0, 7); ctx.fill();
+    } break;
+    case 'thicket': ctx.strokeStyle = '#2f5e22'; ctx.lineWidth = Math.max(1, s * 0.07);
+      for (let k = 0; k < 4; k++) { const cx = x + jit(1), cy = y + jit(0.9); ctx.beginPath(); ctx.moveTo(cx, cy + s * 0.2); ctx.bezierCurveTo(cx + s * 0.15, cy, cx - s * 0.15, cy - s * 0.05, cx, cy - s * 0.22); ctx.stroke(); }
+      break;
+    case 'rock': for (let k = 0; k < 2; k++) {
+      const cx = x + jit(0.8), cy = y + jit(0.6) + s * 0.05, w = s * (0.22 + R() * 0.1);
+      ctx.fillStyle = '#665f55'; ctx.beginPath(); ctx.moveTo(cx - w, cy + w * 0.6); ctx.lineTo(cx, cy - w * 0.8); ctx.lineTo(cx + w, cy + w * 0.6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#b3aa99'; ctx.beginPath(); ctx.moveTo(cx - w * 0.2, cy + w * 0.6); ctx.lineTo(cx, cy - w * 0.8); ctx.lineTo(cx - w, cy + w * 0.6); ctx.closePath(); ctx.fill();
+    } break;
+    case 'spring':
+      ctx.fillStyle = '#7fd6ee'; ctx.beginPath(); ctx.ellipse(x, y + s * 0.05, s * 0.42, s * 0.26, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = Math.max(1, s * 0.05); ctx.beginPath(); ctx.ellipse(x, y + s * 0.05, s * 0.22, s * 0.12, 0, 0, 7); ctx.stroke();
+      break;
+  }
+}
+function drawLandmark(lm, x, y, s, faded) {
+  ctx.save(); ctx.translate(x, y); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, s * 0.07); ctx.strokeStyle = INK;
+  if (faded) ctx.globalAlpha = 0.45;
+  const f = (col) => { ctx.fillStyle = col; ctx.fill(); ctx.stroke(); };
+  switch (lm) {
+    case 'summit': {
+      const lit = S.players.some(p => p.fire > 0);
+      if (lit) {
+        const g = ctx.createRadialGradient(0, -s * 0.3, s * 0.1, 0, -s * 0.3, s * 1.8);
+        g.addColorStop(0, 'rgba(255,178,56,.75)'); g.addColorStop(1, 'rgba(255,120,40,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -s * 0.3, s * 1.8, 0, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(220,214,204,.55)';
+        [[0.25, -1.35, 0.26], [0.55, -1.75, 0.34], [0.95, -2.1, 0.42]].forEach(([dx, dy, rr]) => { ctx.beginPath(); ctx.arc(dx * s, dy * s, rr * s, 0, 7); ctx.fill(); });
+      }
+      ctx.beginPath(); ctx.moveTo(-s * 0.72, s * 0.45); ctx.lineTo(-s * 0.2, -s * 0.38); ctx.lineTo(s * 0.2, -s * 0.38); ctx.lineTo(s * 0.72, s * 0.45); ctx.closePath(); f('#3b2b27');
+      ctx.beginPath(); ctx.ellipse(0, -s * 0.38, s * 0.2, s * 0.07, 0, 0, 7); ctx.fillStyle = '#ff7a2f'; ctx.fill();
+      if (lit) {
+        ctx.beginPath(); ctx.moveTo(-s * 0.2, -s * 0.4); ctx.quadraticCurveTo(-s * 0.25, -s * 0.9, 0, -s * 1.15); ctx.quadraticCurveTo(s * 0.28, -s * 0.85, s * 0.2, -s * 0.4); ctx.closePath(); f('#ffb238');
+        ctx.beginPath(); ctx.moveTo(-s * 0.08, -s * 0.42); ctx.quadraticCurveTo(-s * 0.1, -s * 0.7, 0, -s * 0.85); ctx.quadraticCurveTo(s * 0.12, -s * 0.66, s * 0.08, -s * 0.42); ctx.closePath(); ctx.fillStyle = '#fff1b8'; ctx.fill();
+      }
+      break;
+    }
+    case 'village': {
+      const hut = (hx, hy, w) => {
+        ctx.beginPath(); ctx.rect(hx - w * 0.4, hy - w * 0.1, w * 0.8, w * 0.55); f('#e0a868');
+        ctx.beginPath(); ctx.moveTo(hx - w * 0.62, hy); ctx.lineTo(hx, hy - w * 0.62); ctx.lineTo(hx + w * 0.62, hy); ctx.closePath(); f('#6b3a1a');
+      };
+      hut(-s * 0.3, s * 0.05, s * 0.5); hut(s * 0.3, s * 0.18, s * 0.46);
+      break;
+    }
+    case 'shipwreck':
+      ctx.beginPath(); ctx.moveTo(-s * 0.65, -s * 0.05); ctx.quadraticCurveTo(-s * 0.1, s * 0.6, s * 0.62, s * 0.05); ctx.lineTo(s * 0.4, -s * 0.12); ctx.closePath(); f('#5b3a22');
+      ctx.beginPath(); ctx.moveTo(-s * 0.05, s * 0.1); ctx.lineTo(s * 0.2, -s * 0.65); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(s * 0.17, -s * 0.55); ctx.lineTo(s * 0.55, -s * 0.3); ctx.lineTo(s * 0.1, -s * 0.2); ctx.closePath(); f(CREAM);
+      break;
+    case 'lighthouse':
+      ctx.beginPath(); ctx.moveTo(-s * 0.2, s * 0.55); ctx.lineTo(-s * 0.12, -s * 0.42); ctx.lineTo(s * 0.12, -s * 0.42); ctx.lineTo(s * 0.2, s * 0.55); ctx.closePath(); f('#f4efe6');
+      ctx.fillStyle = '#d8423a'; ctx.fillRect(-s * 0.17, -s * 0.1, s * 0.34, s * 0.14); ctx.fillRect(-s * 0.19, s * 0.22, s * 0.38, s * 0.14);
+      ctx.beginPath(); ctx.arc(0, -s * 0.52, s * 0.12, 0, 7); f('#ffd35a');
+      ctx.fillStyle = 'rgba(255,211,90,.35)'; ctx.beginPath(); ctx.moveTo(0, -s * 0.52); ctx.lineTo(s * 0.9, -s * 0.8); ctx.lineTo(s * 0.9, -s * 0.28); ctx.closePath(); ctx.fill();
+      break;
+    case 'oldcamp':
+      ctx.beginPath(); ctx.moveTo(-s * 0.55, s * 0.4); ctx.lineTo(0, -s * 0.45); ctx.lineTo(s * 0.55, s * 0.4); ctx.closePath(); f('#c7b28a');
+      ctx.beginPath(); ctx.moveTo(-s * 0.12, s * 0.4); ctx.lineTo(0, s * 0.02); ctx.lineTo(s * 0.12, s * 0.4); ctx.closePath(); ctx.fillStyle = INK; ctx.fill();
+      break;
+    case 'hut':
+      ctx.beginPath(); ctx.rect(-s * 0.36, -s * 0.12, s * 0.72, s * 0.55); f('#e9e3d5');
+      ctx.beginPath(); ctx.moveTo(-s * 0.5, -s * 0.1); ctx.lineTo(0, -s * 0.5); ctx.lineTo(s * 0.5, -s * 0.1); ctx.closePath(); f('#4a6b73');
+      ctx.fillStyle = '#d8423a'; ctx.fillRect(-s * 0.05, s * 0.0, s * 0.1, s * 0.32); ctx.fillRect(-s * 0.16, s * 0.11, s * 0.32, s * 0.1);
+      break;
+    case 'camp':
+      ctx.fillStyle = 'rgba(100,70,25,.8)'; ctx.font = `${Math.round(s * 0.5)}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-display')}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SOS', 0, -s * 0.05);
+      break;
+  }
+  ctx.restore();
+}
+function chit(x, y, R, fill) {
+  ctx.beginPath(); ctx.arc(x, y + R * 0.14, R, 0, 7); ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = Math.max(1.5, R * 0.14); ctx.strokeStyle = INK; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, R * 0.8, 0, 7); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = Math.max(1, R * 0.06); ctx.stroke();
+}
+function hazardIcon(kind, x, y, R) {
+  ctx.save(); ctx.translate(x, y); ctx.fillStyle = CREAM; ctx.strokeStyle = CREAM; ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1, R * 0.1);
+  if (kind === 'crab') {
+    for (const sx of [-1, 1]) {
+      for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(sx * R * 0.3, R * (0.05 + k * 0.12)); ctx.lineTo(sx * R * 0.62, R * (0.2 + k * 0.15)); ctx.stroke(); }
+      ctx.beginPath(); ctx.moveTo(sx * R * 0.25, -R * 0.05); ctx.lineTo(sx * R * 0.45, -R * 0.3); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sx * R * 0.48, -R * 0.42, R * 0.16, 0, 7); ctx.fill();
+    }
+    ctx.beginPath(); ctx.ellipse(0, R * 0.1, R * 0.36, R * 0.24, 0, 0, 7); ctx.fill();
+  } else if (kind === 'jelly') {
+    ctx.beginPath(); ctx.arc(0, -R * 0.05, R * 0.42, Math.PI, 0); ctx.closePath(); ctx.fill();
+    for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(k * R * 0.22, 0); ctx.quadraticCurveTo(k * R * 0.22 + R * 0.12, R * 0.25, k * R * 0.22, R * 0.4); ctx.quadraticCurveTo(k * R * 0.22 - R * 0.12, R * 0.52, k * R * 0.22, R * 0.62); ctx.stroke(); }
+  } else if (kind === 'patrol') {
+    ctx.beginPath(); ctx.moveTo(R * 0.38, R * 0.62); ctx.lineTo(R * 0.38, -R * 0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(R * 0.38, -R * 0.66); ctx.lineTo(R * 0.5, -R * 0.38); ctx.lineTo(R * 0.26, -R * 0.38); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(-R * 0.08, R * 0.02, R * 0.3, R * 0.5, 0, 0, 7); ctx.fill();
+    ctx.strokeStyle = HAZARDS.patrol.fill; ctx.lineWidth = Math.max(1, R * 0.08);
+    ctx.beginPath(); ctx.moveTo(-R * 0.25, -R * 0.2); ctx.lineTo(-R * 0.08, -R * 0.05); ctx.lineTo(R * 0.09, -R * 0.2); ctx.moveTo(-R * 0.25, R * 0.12); ctx.lineTo(-R * 0.08, R * 0.27); ctx.lineTo(R * 0.09, R * 0.12); ctx.stroke();
+  }
+  ctx.restore();
+}
+function crateIcon(x, y, s) {
+  ctx.save(); ctx.translate(x, y); ctx.lineWidth = Math.max(1, s * 0.07); ctx.strokeStyle = INK;
+  ctx.fillStyle = '#b77b3e'; ctx.fillRect(-s * 0.32, -s * 0.28, s * 0.64, s * 0.56); ctx.strokeRect(-s * 0.32, -s * 0.28, s * 0.64, s * 0.56);
+  ctx.beginPath(); ctx.moveTo(-s * 0.32, -s * 0.28); ctx.lineTo(s * 0.32, s * 0.28); ctx.moveTo(s * 0.32, -s * 0.28); ctx.lineTo(-s * 0.32, s * 0.28); ctx.stroke();
+  ctx.restore();
+}
+function pawn(x, y, s, p, n, active) {
+  ctx.save(); ctx.translate(x, y); ctx.lineJoin = 'round';
+  if (p.sailing) {
+    ctx.fillStyle = '#9a6a3a'; ctx.strokeStyle = INK; ctx.lineWidth = Math.max(1, s * 0.07);
+    ctx.fillRect(-s * 0.55, s * 0.3, s * 1.1, s * 0.28); ctx.strokeRect(-s * 0.55, s * 0.3, s * 1.1, s * 0.28);
+    ctx.beginPath(); ctx.moveTo(s * 0.35, s * 0.3); ctx.lineTo(s * 0.35, -s * 0.7); ctx.lineTo(s * 0.75, s * 0.05); ctx.closePath(); ctx.fillStyle = CREAM; ctx.fill(); ctx.stroke();
+  }
+  if (active) {
+    ctx.beginPath(); ctx.arc(0, 0, s * 0.78, 0, 7); ctx.strokeStyle = 'rgba(255,244,220,.9)'; ctx.lineWidth = Math.max(1.5, s * 0.1);
+    ctx.setLineDash([s * 0.2, s * 0.14]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(0, s * 0.46, s * 0.38, s * 0.13, 0, 0, 7); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.36, s * 0.42); ctx.quadraticCurveTo(-s * 0.36, s * 0.02, -s * 0.12, -s * 0.08);
+  ctx.lineTo(s * 0.12, -s * 0.08); ctx.quadraticCurveTo(s * 0.36, s * 0.02, s * 0.36, s * 0.42); ctx.closePath();
+  ctx.fillStyle = p.color; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = Math.max(1.2, s * 0.08); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, -s * 0.3, s * 0.22, 0, 7); ctx.fill(); ctx.stroke();
+  if (s >= 12) {
+    ctx.fillStyle = INK; ctx.font = `600 ${Math.round(s * 0.36)}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-body')}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(n), 0, s * 0.2);
+  }
+  ctx.restore();
+}
+
+function draw() {
+  if (!S || !W) return;
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = TERRAIN.deep.fill; ctx.fillRect(0, 0, W, H);
+  const s = size;
+  // terrain
+  S.tiles.forEach((t, i) => {
+    const [x, y] = px(t.c, t.r);
+    hexPath(x, y, s + 0.6);
+    ctx.fillStyle = isEdge(t) ? '#114a5d' : TERRAIN[t.t].fill; ctx.fill();
+    if (!TERRAIN[t.t].water) { ctx.strokeStyle = 'rgba(27,20,16,.22)'; ctx.lineWidth = 1; hexPath(x, y, s); ctx.stroke(); }
+    decorate(t, i, x, y);
+  });
+  // tribal land
+  for (const i of S.meta.territory) {
+    const t = S.tiles[i], [x, y] = px(t.c, t.r);
+    hexPath(x, y, s * 0.9); ctx.strokeStyle = 'rgba(214,122,58,.75)'; ctx.lineWidth = Math.max(1, s * 0.06);
+    ctx.setLineDash([s * 0.18, s * 0.14]); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // stock pips
+  if (s >= 13) S.tiles.forEach(t => {
+    if (!t.max || TERRAIN[t.t].water) return;
+    const [x, y] = px(t.c, t.r), gap = s * 0.2, r0 = Math.max(1.3, s * 0.07);
+    for (let k = 0; k < t.max; k++) {
+      ctx.beginPath(); ctx.arc(x + (k - (t.max - 1) / 2) * gap, y + s * 0.66, r0, 0, 7);
+      ctx.fillStyle = k < t.stock ? 'rgba(255,248,230,.95)' : 'rgba(27,20,16,.35)'; ctx.fill();
+    }
+  });
+  // island names
+  ctx.save();
+  ctx.font = `${Math.max(9, Math.round(s * 0.52))}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-display')}`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(255,244,220,.7)';
+  if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round(s * 0.08)}px`;
+  for (const I of ISLANDS) {
+    const [ux, uy] = unit(I.c, I.r);
+    const off = I.key === 'main' ? -(I.ry * SQ3 + 2.3) : (I.r < ROWS / 2 ? 1 : -1) * (I.ry * SQ3 + 1.3);
+    const [x, y] = upx(ux, uy + off);
+    ctx.fillText(I.name.toUpperCase(), x, y);
+  }
+  ctx.restore();
+  // landmarks
+  S.tiles.forEach(t => {
+    if (!t.lm) return;
+    const [x, y] = px(t.c, t.r), L = LANDMARKS[t.lm];
+    drawLandmark(t.lm, x, y, s, L.item && S.lmStock[t.lm] <= 0);
+  });
+  // reachable
+  const p = curP();
+  if (reach && p) {
+    for (const i of reach.dist.keys()) {
+      const t = S.tiles[i], [x, y] = px(t.c, t.r);
+      hexPath(x, y, s * 0.9); ctx.fillStyle = 'rgba(255,244,220,.2)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(255,244,220,.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+  }
+  // crates & hazards
+  for (const c of S.crates) { const [x, y] = px(c.c, c.r); crateIcon(x, y, s); }
+  for (const h of S.hazards) {
+    const [x, y] = px(h.c, h.r), R = s * 0.52;
+    chit(x, y, R, HAZARDS[h.kind].fill); hazardIcon(h.kind, x, y, R);
+  }
+  // hover path
+  if (reach && hoverIdx >= 0 && reach.dist.has(hoverIdx)) {
+    const pts = [];
+    for (let i = hoverIdx; i !== undefined; i = reach.prev.get(i)) pts.unshift(px(S.tiles[i].c, S.tiles[i].r));
+    pts.unshift(px(p.c, p.r));
+    ctx.beginPath(); pts.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    ctx.strokeStyle = '#ffb238'; ctx.lineWidth = Math.max(2, s * 0.14); ctx.setLineDash([s * 0.25, s * 0.2]); ctx.lineCap = 'round'; ctx.stroke(); ctx.setLineDash([]);
+  }
+  // pawns
+  const groups = new Map();
+  S.players.forEach((q, n) => { if (q.status !== 'alive') return; const k = pIdx(q); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(n); });
+  for (const [k, ns] of groups) {
+    const t = S.tiles[k], [x, y] = px(t.c, t.r);
+    const offs = ns.length === 1 ? [[0, 0]] : [[-0.3, -0.12], [0.3, 0.12], [-0.25, 0.3], [0.25, -0.3]];
+    ns.forEach((n, j) => pawn(x + offs[j][0] * s, y + offs[j][1] * s, s * (ns.length > 1 ? 0.8 : 0.95), S.players[n], n + 1, n === S.cur && !S.over));
+  }
+  // hover outline
+  if (hoverIdx >= 0) {
+    const t = S.tiles[hoverIdx], [x, y] = px(t.c, t.r);
+    hexPath(x, y, s * 0.96); ctx.strokeStyle = '#ffb238'; ctx.lineWidth = 2.5; ctx.stroke();
+    if (reach && reach.dist.has(hoverIdx)) {
+      const cost = reach.dist.get(hoverIdx);
+      ctx.beginPath(); ctx.arc(x + s * 0.55, y - s * 0.55, s * 0.3, 0, 7); ctx.fillStyle = '#ffb238'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = INK; ctx.font = `600 ${Math.round(s * 0.36)}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-data')}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(cost), x + s * 0.55, y - s * 0.53);
+    }
+  }
+}
+function hitTest(e) {
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  let best = -1, bd = Infinity;
+  S.tiles.forEach((t, i) => { const [cx, cy] = px(t.c, t.r), d = (cx - x) ** 2 + (cy - y) ** 2; if (d < bd) { bd = d; best = i; } });
+  return bd <= (size * 1.05) ** 2 ? best : -1;
+}
+function centerOn(p) {
+  if (!p || scroller.scrollWidth <= scroller.clientWidth + 2) return;
+  const [x, y] = px(p.c, p.r);
+  scroller.scrollTo({ left: x - scroller.clientWidth / 2, top: y - scroller.clientHeight / 2, behavior: reduceMotion ? 'auto' : 'smooth' });
+}
+
+/* ================= tray (side panel) ================= */
+function paintDie() {
+  const el = document.querySelector('.die'); if (!el) return;
+  const faces = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+  const on = faces[S.turn.die] || [];
+  el.classList.toggle('blank', !S.turn.die);
+  [...el.children].forEach((pip, k) => { pip.style.visibility = on.includes(k) ? 'visible' : 'hidden'; });
+}
+function costChips(p, cost) {
+  return Object.entries(cost).map(([k, v]) => `<span class="${p.res[k] < v ? 'short' : ''}">${ICON[k]}${v} ${RES_NAME[k]}</span>`).join('');
+}
+function tileInfoHTML(i) {
+  const t = S.tiles[i], T = TERRAIN[t.t], p = curP();
+  const bits = [`<h3>${T.name}${t.isl ? ` · ${ISLAND_NAME[t.isl]}` : ''}</h3>`];
+  if (T.yield) bits.push(`<p>Gather: ${fmtYield(T.yield)}${t.t === 'shallow' ? ' (needs a spear)' : ''}${t.max ? ` · ${t.stock}/${t.max} left` : ''}</p>`);
+  if (p && p.status === 'alive') {
+    const c = moveCost(p, t);
+    bits.push(`<p>${c === Infinity ? (t.t === 'village' ? 'Off-limits' : p.sailing ? 'Your raft can’t go ashore' : 'Too deep to swim. Build a canoe.') : `Move cost: ${c}`}</p>`);
+  }
+  if (t.lm) { const L = LANDMARKS[t.lm]; bits.push(`<p class="good"><b>${L.name}.</b> ${L.text}${L.item ? (S.lmStock[t.lm] > 0 ? '' : ' Nothing left to find.') : ''}</p>`); }
+  if (S.meta.territory.includes(i)) bits.push('<p class="warn">Tribal land: patrols roam here.</p>');
+  if (isEdge(t)) bits.push('<p>Map edge. Reach it on a raft to escape.</p>');
+  for (const h of hazardsAt(i)) bits.push(`<p class="warn"><b>${HAZARDS[h.kind].name}.</b> ${HAZARDS[h.kind].text}</p>`);
+  if (S.crates.some(c => c.c === t.c && c.r === t.r)) bits.push('<p class="good"><b>Supply crate.</b> Step here to open it.</p>');
+  const here = S.players.filter(q => q.status === 'alive' && q.c === t.c && q.r === t.r);
+  if (here.length) bits.push(`<p>${here.map(pname).join(', ')} ${here.length > 1 ? 'are' : 'is'} here.</p>`);
+  return bits.join('');
+}
+function showTileInfo(i) {
+  const el = $('#tileinfo');
+  if (i < 0 || !S) { el.hidden = true; return; }
+  el.innerHTML = tileInfoHTML(i); el.hidden = false;
+}
+
+function renderPanel() {
+  const p = curP(), tn = S.turn, t = tileOf(p), T = TERRAIN[t.t];
+  const pc = `--pc:${p.color}`;
+  $('#day-label').textContent = `Day ${Math.min(S.day, MAX_DAY)} of ${MAX_DAY}`;
+  $('#daytrack').innerHTML = Array.from({ length: MAX_DAY }, (_, k) => `<i class="${k < S.day - 1 ? 'past' : k === MAX_DAY - 1 ? 'storm' : ''}"></i>`).join('');
+  $('#event-chip').innerHTML = S.event ? `Last night: <b>${EVENTS[S.event].name}</b>` : 'Monsoon arrives after day 30';
+
+  const g = gatherInfo(p);
+  const L = t.lm && LANDMARKS[t.lm];
+  const canSearch = L && L.item && !p.items[L.item] && !p.sailing;
+  const over = !!S.over;
+  let hint;
+  if (over) hint = 'The game is over. Start a new one from the top bar.';
+  else if (!tn.rolled) hint = 'Roll to see how far you can move. Gathering, searching, resting and building can happen before or after moving.';
+  else if (tn.mp > 0) hint = lastPointer === 'touch' ? 'Tap a highlighted hex to preview the route, tap again to move.' : 'Click a highlighted hex to move there. Hazards stop you in your tracks.';
+  else hint = 'Out of moves. Use your actions, build something, or end your turn.';
+
+  const pipsHTML = Array.from({ length: ACTIONS }, (_, k) => `<i class="${k < tn.actions ? 'on' : ''}"></i>`).join('');
+  const raftRoute = [
+    [p.items.canoe || p.sailing, 'Build a canoe on a beach'],
+    [p.items.sail, 'Find sail canvas at the Wreck Reef shipwreck'],
+    [p.sailing, 'Build the raft on a beach, with provisions'],
+    [p.status === 'escaped', 'Sail off any edge of the map'],
+  ];
+  const fireRoute = [
+    [p.items.canoe || p.items.flare, 'Build a canoe on a beach'],
+    [p.items.flare, 'Find the flare gun at the Gull Point lighthouse'],
+    [p.fire > 0, 'Light the signal fire on the summit'],
+    [p.status === 'rescued', p.fire > 0 ? `Stay within 1 hex of the summit: ${p.fire} night${p.fire > 1 ? 's' : ''} to go` : 'Stay near the summit for 3 nights'],
+  ];
+  const steps = arr => `<ol class="steps">${arr.map(([d, l]) => `<li class="${d ? 'done' : ''}">${l}</li>`).join('')}</ol>`;
+
+  $('#side').innerHTML = `
+  <section class="card turn" style="${pc}">
+    <div class="turn-head"><span class="pdot"></span><div class="who">${esc(p.name)}’s turn</div></div>
+    <div class="turn-stats">
+      <div class="die${tn.die ? '' : ' blank'}" aria-label="${tn.die ? `Die shows ${tn.die}` : 'Not rolled yet'}">${'<i></i>'.repeat(9)}</div>
+      <div class="meters">
+        <div class="meter"><span>Moves left</span><b>${tn.rolled ? tn.mp : '–'}</b></div>
+        <div class="meter"><span>Actions</span><span class="pips" aria-label="${tn.actions} of ${ACTIONS} actions left">${pipsHTML}</span></div>
+        <div class="meter"><span>Standing on</span><b style="font-family:var(--font-body);font-weight:600">${T.name}</b></div>
+      </div>
+    </div>
+    <div class="btn-grid">
+      <button class="btn primary" data-act="roll" ${tn.rolled || over ? 'disabled' : ''}>Roll to move <kbd>R</kbd></button>
+      <button class="btn" data-act="gather" ${g.ok && tn.actions > 0 && !over ? '' : 'disabled'} title="${esc(g.ok ? '' : g.why)}">Gather <span class="sub">${g.ok ? fmtYield(g.yield) : 'none'}</span></button>
+      ${canSearch ? `<button class="btn wide" data-act="search" ${tn.actions > 0 && !over ? '' : 'disabled'}>${L.verb} <span class="sub">3+ on a die finds the ${ITEMS[L.item].name.toLowerCase()}</span></button>` : ''}
+      <button class="btn" data-act="rest" ${tn.actions > 0 && p.hp < MAX_HP && !over ? '' : 'disabled'}>Rest <span class="sub">+1 health</span></button>
+      <button class="btn" data-act="end" ${over ? 'disabled' : ''}>End turn <kbd>E</kbd></button>
+    </div>
+    <p class="hint">${!g.ok && T.yield ? esc(g.why) + ' ' : ''}${hint}</p>
+  </section>
+
+  <section class="card">
+    <h2>Health &amp; supplies</h2>
+    <div class="health" aria-label="${p.hp} of ${MAX_HP} health">${Array.from({ length: MAX_HP }, (_, k) => `<i class="${k < p.hp ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="res-grid">${RES.map(k => `<div class="res">${ICON[k]}<b>${p.res[k]}</b><small>${RES_NAME[k]}</small></div>`).join('')}</div>
+    <div class="items">${Object.keys(ITEMS).map(k => `<span class="item ${p.items[k] ? 'have' : ''}" title="${esc(ITEMS[k].desc || '')}">${ITEMS[k].name}${k === 'medkit' && p.items.medkit ? ' <button data-act="medkit">Use</button>' : ''}</span>`).join('')}</div>
+    <p class="hint">Every night you eat 1 Food and drink 1 Water. Anything missing costs 1 health each. Sleeping at a spring means free water.</p>
+  </section>
+
+  <section class="card">
+    <h2>Two ways off the island</h2>
+    <div class="route"><h3>Sail away</h3>${steps(raftRoute)}</div>
+    <div class="route"><h3>Signal for rescue</h3>${steps(fireRoute)}</div>
+  </section>
+
+  <section class="card">
+    <h2>Build</h2>
+    <div class="recipes">${RECIPES.map(R => {
+      const st = recipeState(p, R);
+      return `<div class="recipe ${st.done ? 'built' : ''}">
+        <h3>${R.name}</h3>
+        <button class="btn ${st.ok ? 'primary' : ''}" data-act="craft" data-id="${R.id}" ${st.ok ? '' : 'disabled'}>${st.done ? 'Done' : 'Build'}</button>
+        <div class="cost">${costChips(p, R.cost)}${R.need ? `<span class="${p.items[R.need] ? '' : 'short'}">${ITEMS[R.need].name}</span>` : ''}</div>
+        <p>${R.desc}${st.why && !st.done ? ` <b>${st.why}</b>` : ''}</p>
+      </div>`;
+    }).join('')}</div>
+  </section>
+
+  ${S.players.length > 1 ? `<section class="card">
+    <h2>Castaways</h2>
+    <div class="crew">${S.players.map((q, n) => `<div class="mate ${n === S.cur ? 'cur' : ''} ${q.status === 'dead' ? 'dead' : ''}">
+      <span class="pdot" style="--pc:${q.color}"></span>
+      <span class="name">${n + 1}. ${esc(q.name)}${q.fire > 0 ? ' · fire lit' : ''}${q.sailing ? ' · at sea' : ''}</span>
+      <span class="tag">${q.status === 'alive' ? `${q.hp}♥ ${q.res.food}F ${q.res.water}W` : q.status}</span>
+    </div>`).join('')}</div>
+  </section>` : ''}
+
+  <section class="card">
+    <h2>Island log</h2>
+    <ol class="log">${S.log.slice(0, 40).map(e => `<li><span class="d">D${e.d}</span>${e.html}</li>`).join('')}</ol>
+  </section>`;
+  paintDie();
+}
+function renderLegend() {
+  const items = [
+    ['crab', HAZARDS.crab.name], ['jelly', HAZARDS.jelly.name], ['patrol', HAZARDS.patrol.name],
+  ];
+  $('#legend').innerHTML = items.map(([k, n]) => `<span><canvas data-chit="${k}" width="40" height="40"></canvas>${n}</span>`).join('') +
+    '<span><canvas data-chit="territory" width="40" height="40"></canvas>Tribal land</span><span><canvas data-chit="pips" width="40" height="40"></canvas>Gathers left on a hex</span>';
+  const real = ctx;
+  document.querySelectorAll('#legend canvas').forEach(c => {
+    const k = c.dataset.chit;
+    ctx = c.getContext('2d');
+    if (HAZARDS[k]) { chit(20, 19, 15, HAZARDS[k].fill); hazardIcon(k, 20, 19, 15); }
+    else if (k === 'territory') { hexPath(20, 20, 17); ctx.fillStyle = TERRAIN.jungle.fill; ctx.fill(); hexPath(20, 20, 14); ctx.strokeStyle = 'rgba(214,122,58,.9)'; ctx.lineWidth = 2.5; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]); }
+    else if (k === 'pips') { for (let j = 0; j < 3; j++) { ctx.beginPath(); ctx.arc(10 + j * 10, 20, 3.5, 0, 7); ctx.fillStyle = j < 2 ? '#fff8e6' : 'rgba(255,255,255,.2)'; ctx.fill(); } }
+  });
+  ctx = real;
+}
+
+function render() { if (!S) return; renderPanel(); draw(); if (hoverIdx >= 0) showTileInfo(hoverIdx); }
+
+/* ================= modal ================= */
+function modal({ eyebrow = '', title, html = '', choices = [], cls = '' }) {
+  return new Promise(resolve => {
+    const m = $('#modal');
+    m.innerHTML = `<div class="modal-card ${cls}" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      ${eyebrow ? `<p class="eyebrow">${eyebrow}</p>` : ''}<h2 id="modal-title">${esc(title)}</h2>${html}
+      <div class="choices">${choices.map((c, k) => `<button class="btn ${c.primary ? 'primary' : ''}" data-k="${k}" ${c.disabled ? 'disabled' : ''}>${esc(c.label)}</button>`).join('')}</div></div>`;
+    m.hidden = false;
+    m.scrollTop = 0;
+    const first = m.querySelector('button:not(:disabled)'); if (first) first.focus({ preventScroll: true });
+    m.onclick = e => {
+      const b = e.target.closest('button[data-k]'); if (!b) return;
+      m.hidden = true; m.onclick = null; m.innerHTML = '';
+      resolve(choices[+b.dataset.k].value);
+    };
+  });
+}
+function showRules() {
+  modal({
+    cls: 'wide', eyebrow: 'Rules', title: 'How to play Castaway Isles',
+    html: `<div class="rules">
+      <div><h3>The goal</h3><p>You are shipwrecked on Castaway Isle with four smaller islands on the horizon. Gather resources, stay alive, and get off the islands before the monsoon arrives after day ${MAX_DAY}. The first castaway to escape wins. If several are lifted off by the same helicopter, they win together.</p></div>
+      <div><h3>Your turn</h3><ul>
+        <li><b>Roll</b> the die once. The number is how many movement points you have.</li>
+        <li><b>Move</b> by clicking a highlighted hex. Beach and springs cost 1, jungle, thicket and rock cost 2, the summit costs 3. Swimming in the shallows costs 2. Deep water needs a canoe (1 per hex).</li>
+        <li>Take up to <b>${ACTIONS} actions</b>: gather from your hex, search a landmark, or rest (+1 health).</li>
+        <li><b>Build</b> anything you can afford. Building is free and doesn't use an action.</li>
+      </ul></div>
+      <div><h3>Night</h3><p>After everyone has gone, night falls. Each castaway eats 1 Food and drinks 1 Water; each one you lack costs 1 health. Then an event card is drawn, hazards move, and picked-over hexes slowly regrow. At 0 health you are out.</p></div>
+      <div><h3>Hazards</h3><ul>
+        <li><b>Flesh-eating crabs</b> roam the beaches. Stepping onto them costs 2 health, unless you carry a spear. Then you drive them off and eat one.</li>
+        <li><b>Jellyfish swarms</b> drift through the water. Swimming into one costs 2 health, from a boat 1.</li>
+        <li><b>Tribal patrols</b> guard the land around the village (dashed hexes). Offer 2 Food to pass, or run: lose 1 health and drop half your wood and rope. The village itself is off-limits.</li>
+      </ul><p>Entering a hazard ends your movement. If a hazard drifts onto you overnight, you face it at the start of your turn.</p></div>
+      <div><h3>The islands</h3><div class="table-scroll"><table>
+        <tr><th>Island</th><th>Landmark</th><th>What you can find</th></tr>
+        <tr><td>Wreck Reef (NW)</td><td>Shipwreck</td><td>Sail canvas, needed for the raft</td></tr>
+        <tr><td>Gull Point (NE)</td><td>Old lighthouse</td><td>Flare gun, needed for the signal fire</td></tr>
+        <tr><td>Crab Key (SW)</td><td>Abandoned camp</td><td>Machete: jungle and thicket cost 1 move (only one)</td></tr>
+        <tr><td>Turtle Atoll (SE)</td><td>Research hut</td><td>First-aid kit: heal 3 once</td></tr>
+      </table></div><p>Searching uses an action and succeeds on a roll of 3 or more.</p></div>
+      <div><h3>Gathering</h3><div class="table-scroll"><table>
+        <tr><th>Hex</th><th>Gives</th></tr>
+        <tr><td>Beach</td><td>2 Food (coconuts and clams)</td></tr>
+        <tr><td>Jungle</td><td>3 Wood</td></tr>
+        <tr><td>Vine thicket</td><td>2 Rope, 1 Wood</td></tr>
+        <tr><td>Rocky slopes</td><td>2 Stone</td></tr>
+        <tr><td>Freshwater spring</td><td>3 Water</td></tr>
+        <tr><td>Shallows (with spear)</td><td>2 Food</td></tr>
+      </table></div><p>The white dots on a hex show how many more times it can be gathered.</p></div>
+      <div><h3>Escaping</h3><ul>
+        <li><b>Sail away:</b> build a raft on a beach (5 Wood, 3 Rope, 1 Stone, 2 Food, 2 Water and the sail canvas). You launch at once. Sail off any edge of the map.</li>
+        <li><b>Signal for rescue:</b> light a signal fire on the summit (4 Wood, 1 Rope and the flare gun). After 3 nights a helicopter lands. Everyone within 1 hex of the summit is rescued.</li>
+      </ul></div>
+      <div><h3>Keyboard</h3><p><kbd>R</kbd> roll, <kbd>G</kbd> gather, <kbd>E</kbd> end turn, <kbd>?</kbd> rules.</p></div>
+    </div>`,
+    choices: [{ label: 'Back to the island', value: 1, primary: true }],
+  });
+}
+function showSetup() {
+  const saved = loadSaved();
+  const m = $('#modal');
+  let count = 2;
+  const paint = () => {
+    const names = [...m.querySelectorAll('.setup-names input')].map(i => i.value);
+    m.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+      <p class="eyebrow">New game</p>
+      <h2 id="setup-title">Who washed ashore?</h2>
+      <p>One big island, four small ones, and ${MAX_DAY} days until the monsoon. Collect resources, dodge crabs, jellyfish and patrols, and find a way home.</p>
+      <p class="setup-label" id="count-label">Players</p>
+      <div class="setup-count" role="group" aria-labelledby="count-label">${[1, 2, 3, 4].map(n => `<button class="btn" data-count="${n}" aria-pressed="${n === count}" aria-label="${n} ${n === 1 ? 'player' : 'players'}">${n}</button>`).join('')}</div>
+      <div class="setup-names">${Array.from({ length: count }, (_, k) => `<label for="pname-${k}"><span class="pdot" style="--pc:${PLAYER_COLORS[k]}"></span><input id="pname-${k}" maxlength="16" value="${esc(names[k] ?? DEFAULT_NAMES[k])}" aria-label="Player ${k + 1} name"></label>`).join('')}</div>
+      <p class="hint">Pass-and-play: everyone shares this screen and takes turns.</p>
+      <div class="choices"><button class="btn primary" data-start>Start the game</button>${saved && !saved.over ? '<button class="btn" data-continue>Continue saved game</button>' : ''}${S ? '<button class="btn ghost" data-cancel>Cancel</button>' : ''}</div>
+    </div>`;
+  };
+  paint();
+  m.hidden = false;
+  m.onclick = e => {
+    const c = e.target.closest('[data-count]');
+    if (c) { count = +c.dataset.count; paint(); return; }
+    if (e.target.closest('[data-start]')) {
+      const names = [...m.querySelectorAll('.setup-names input')].map((i, k) => i.value.trim() || DEFAULT_NAMES[k]);
+      m.hidden = true; m.onclick = null; m.innerHTML = '';
+      hoverIdx = -1; busy = false;
+      newGame(names); resize();
+      return;
+    }
+    if (e.target.closest('[data-continue]')) { m.hidden = true; m.onclick = null; m.innerHTML = ''; resume(saved); return; }
+    if (e.target.closest('[data-cancel]')) { m.hidden = true; m.onclick = null; m.innerHTML = ''; }
+  };
+  const first = m.querySelector('[data-start]'); if (first) first.focus({ preventScroll: true });
+}
+function resume(state) {
+  S = state; terrSet = new Set(S.meta.territory); busy = false; hoverIdx = -1;
+  computeReach(); resize(); render(); centerOn(curP());
+  if (S.over) showGameOver();
+}
+
+/* ================= wiring ================= */
+$('#side').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  if (a === 'roll') doRoll();
+  else if (a === 'gather') doGather();
+  else if (a === 'search') doSearch();
+  else if (a === 'rest') doRest();
+  else if (a === 'end') endTurn();
+  else if (a === 'medkit') doMedkit();
+  else if (a === 'craft') doCraft(b.dataset.id);
+});
+$('#btn-rules').addEventListener('click', showRules);
+$('#btn-new').addEventListener('click', showSetup);
+cv.addEventListener('pointerdown', e => { lastPointer = e.pointerType; });
+cv.addEventListener('pointermove', e => {
+  if (!S || e.pointerType === 'touch') return;
+  const i = hitTest(e);
+  if (i !== hoverIdx) { hoverIdx = i; draw(); showTileInfo(i); }
+});
+cv.addEventListener('pointerleave', e => { if (e.pointerType === 'touch') return; hoverIdx = -1; draw(); showTileInfo(-1); });
+cv.addEventListener('click', e => {
+  if (!S || busy) return;
+  const i = hitTest(e);
+  if (i < 0) return;
+  if (lastPointer === 'touch' && hoverIdx !== i) { hoverIdx = i; draw(); showTileInfo(i); return; }
+  if (reach && reach.dist.has(i)) moveTo(i);
+  else { hoverIdx = i; draw(); showTileInfo(i); }
+});
+document.addEventListener('keydown', e => {
+  if (!S || !$('#modal').hidden || e.target.closest('input')) return;
+  const k = e.key.toLowerCase();
+  if (k === 'r') doRoll();
+  else if (k === 'g') doGather();
+  else if (k === 'e') endTurn();
+  else if (k === '?') showRules();
+});
+new ResizeObserver(() => resize()).observe(scroller);
+if (document.fonts) document.fonts.ready.then(() => { draw(); renderLegend(); });
+
+/* ================= boot ================= */
+function boot(data) {
+  renderLegend();
+  const fromHot = data && data.state;
+  const saved = fromHot || loadSaved();
+  if (saved && !saved.over) resume(saved);
+  else showSetup();
+}
+window.claude?.hot?.snapshot?.(() => ({ state: S }));
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
